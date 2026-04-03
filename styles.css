@@ -47,7 +47,7 @@ h1 {
 .form input[type="password"],
 .form input[type="date"],
 .form textarea {
-    width: 100%;
+    width: 401px;
     padding: 10px;
     border: 1px solid #e2e8f0;
     border-radius: 8px;
@@ -108,7 +108,7 @@ h1 {
 
 label {
     display: block;
-    margin-bottom: 8px
+    margin-bottom: 2px
 }
 
 label input,

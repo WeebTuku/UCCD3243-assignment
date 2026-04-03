@@ -47,9 +47,13 @@
                 <div class="form">
                     <h1>User Registration</h1>
                     <form name="registration" action="" method="post">
+                        <label for="student_name">Full Name</label>
                         <input type="text" name="student_name" placeholder="Your Full Name" required /><br>
+                        <label for="email">Email</label>
                         <input type="email" name="email" placeholder="Email" required /><br>
+                        <label for="password">Password</label>
                         <input type="password" name="password" placeholder="Password" required /><br>
+                        <label for="dob">Date of Birth</label>
                         <input type="date" name="dob" placeholder="Date of Birth" required /><br>
                         <input type="submit" name="submit" value="Register" />
                     </form>

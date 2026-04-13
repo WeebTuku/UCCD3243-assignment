@@ -2,14 +2,14 @@
 require 'database.php';
 include 'auth.php';
 
-$action       = $_GET['action'] ?? '';
-$student_name = $_SESSION['student_name'];
+$action     = $_GET['action'] ?? '';
+$student_id = $_SESSION['student_id'];
 
 // Delete achievement — only if it belongs to the logged-in student
 if ($action === 'delete' && isset($_GET['id'])) {
     $id   = (int)$_GET['id'];
-    $stmt = mysqli_prepare($con, 'DELETE FROM achievements WHERE id = ? AND student_name = ?');
-    mysqli_stmt_bind_param($stmt, 'is', $id, $student_name);
+    $stmt = mysqli_prepare($con, 'DELETE FROM achievements WHERE id = ? AND student_id = ?');
+    mysqli_stmt_bind_param($stmt, 'ii', $id, $student_id);
     mysqli_stmt_execute($stmt);
     mysqli_stmt_close($stmt);
     $_SESSION['flash'] = ['type' => 'success', 'msg' => 'Achievement deleted.'];
@@ -26,31 +26,34 @@ $order       = strtolower($_GET['order'] ?? 'desc') === 'desc' ? 'DESC' : 'ASC';
 $allowed_sorts = ['title', 'date_received', 'achievement_type', 'organisation'];
 if (!in_array($sort, $allowed_sorts)) $sort = 'date_received';
 
-// Build query — only show records belonging to the logged-in student
-$esc_name = mysqli_real_escape_string($con, $student_name);
-$conds    = ["student_name = '{$esc_name}'"];
+// Build query using prepared statement
+$where  = 'WHERE student_id = ?';
+$params = [$student_id];
+$types  = 'i';
 
 if ($q !== '') {
-    $esc_q   = mysqli_real_escape_string($con, $q);
-    $like    = '%' . $esc_q . '%';
-    $conds[] = "(title LIKE '{$like}' OR organisation LIKE '{$like}' OR description LIKE '{$like}')";
+    $like    = '%' . $q . '%';
+    $where  .= ' AND (title LIKE ? OR organisation LIKE ? OR description LIKE ?)';
+    $types  .= 'sss';
+    $params  = array_merge($params, [$like, $like, $like]);
 }
 if ($filter_type !== '') {
-    $esc_type = mysqli_real_escape_string($con, $filter_type);
-    $conds[]  = "achievement_type = '{$esc_type}'";
+    $where  .= ' AND achievement_type = ?';
+    $types  .= 's';
+    $params[] = $filter_type;
 }
 
-$sql = 'SELECT * FROM achievements';
-if (count($conds) > 0) $sql .= ' WHERE ' . implode(' AND ', $conds);
-$sql .= " ORDER BY {$sort} {$order}";
+$sql  = "SELECT * FROM achievements $where ORDER BY {$sort} {$order}";
+$stmt = mysqli_prepare($con, $sql);
+mysqli_stmt_bind_param($stmt, $types, ...$params);
+mysqli_stmt_execute($stmt);
+$res  = mysqli_stmt_get_result($stmt);
 
 $achievements = [];
-$res = mysqli_query($con, $sql);
-if ($res) {
-    while ($row = mysqli_fetch_assoc($res)) {
-        $achievements[] = $row;
-    }
+while ($row = mysqli_fetch_assoc($res)) {
+    $achievements[] = $row;
 }
+mysqli_stmt_close($stmt);
 ?>
 <!doctype html>
 <html lang="en">

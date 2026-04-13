@@ -2,63 +2,69 @@
 require 'database.php';
 include 'auth.php';
 
-$id           = isset($_GET['id']) ? (int)$_GET['id'] : 0;
-$student_name = $_SESSION['student_name'];
+$id         = isset($_GET['id']) ? (int)$_GET['id'] : 0;
+$student_id = $_SESSION['student_id'];
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $title            = $_POST['title']            ?? '';
-    $achievement_type = $_POST['achievement_type'] ?? '';
-    $date_received    = $_POST['date_received']    ?? '';
-    $organisation     = $_POST['organisation']     ?? '';
-    $description      = $_POST['description']      ?? '';
+    $title            = trim($_POST['title']            ?? '');
+    $achievement_type = trim($_POST['achievement_type'] ?? '');
+    $date_received    = trim($_POST['date_received']    ?? '');
+    $organisation     = trim($_POST['organisation']     ?? '');
+    $description      = trim($_POST['description']      ?? '');
     $post_id          = isset($_POST['id']) ? (int)$_POST['id'] : 0;
 
+    if (empty($title) || empty($achievement_type) || empty($date_received) || empty($organisation) || empty($description)) {
+        $_SESSION['flash'] = ['type' => 'error', 'msg' => 'All fields are required.'];
+        header('Location: ' . $_SERVER['REQUEST_URI']);
+        exit;
+    }
+
     if ($post_id > 0) {
-        // UPDATE — only if the record belongs to the logged-in student
         $stmt = mysqli_prepare($con,
             'UPDATE achievements
              SET title = ?, achievement_type = ?, date_received = ?, organisation = ?, description = ?
-             WHERE id = ? AND student_name = ?'
+             WHERE id = ? AND student_id = ?'
         );
-        mysqli_stmt_bind_param($stmt, 'sssssis',
-            $title, $achievement_type, $date_received, $organisation, $description,
-            $post_id, $student_name
+        mysqli_stmt_bind_param($stmt, 'sssssii',
+            $title, $achievement_type, $date_received, $organisation, $description, $post_id, $student_id
         );
-        mysqli_stmt_execute($stmt);
+        if (mysqli_stmt_execute($stmt)) {
+            $_SESSION['flash'] = ['type' => 'success', 'msg' => 'Achievement updated successfully.'];
+        } else {
+            $_SESSION['flash'] = ['type' => 'error', 'msg' => 'Failed to update achievement. Please try again.'];
+        }
         mysqli_stmt_close($stmt);
-        $_SESSION['flash'] = ['type' => 'success', 'msg' => 'Achievement updated successfully.'];
     } else {
-        // INSERT — tie the record to the logged-in student by name
         $stmt = mysqli_prepare($con,
-            'INSERT INTO achievements (student_name, title, achievement_type, date_received, organisation, description)
+            'INSERT INTO achievements (student_id, title, achievement_type, date_received, organisation, description)
              VALUES (?, ?, ?, ?, ?, ?)'
         );
-        mysqli_stmt_bind_param($stmt, 'ssssss',
-            $student_name, $title, $achievement_type, $date_received, $organisation, $description
+        mysqli_stmt_bind_param($stmt, 'isssss',
+            $student_id, $title, $achievement_type, $date_received, $organisation, $description
         );
-        mysqli_stmt_execute($stmt);
+        if (mysqli_stmt_execute($stmt)) {
+            $_SESSION['flash'] = ['type' => 'success', 'msg' => 'Achievement added successfully.'];
+        } else {
+            $_SESSION['flash'] = ['type' => 'error', 'msg' => 'Failed to add achievement. Please try again.'];
+        }
         mysqli_stmt_close($stmt);
-        $_SESSION['flash'] = ['type' => 'success', 'msg' => 'Achievement added successfully.'];
     }
 
     header('Location: achievement-tracker.php');
     exit;
 }
 
-// Load existing record for editing
 $achievement = null;
 if ($id > 0) {
-    $stmt = mysqli_prepare($con,
-        'SELECT * FROM achievements WHERE id = ? AND student_name = ?'
-    );
-    mysqli_stmt_bind_param($stmt, 'is', $id, $student_name);
+    $stmt = mysqli_prepare($con, 'SELECT * FROM achievements WHERE id = ? AND student_id = ?');
+    mysqli_stmt_bind_param($stmt, 'ii', $id, $student_id);
     mysqli_stmt_execute($stmt);
     $res         = mysqli_stmt_get_result($stmt);
     $achievement = mysqli_fetch_assoc($res);
     mysqli_stmt_close($stmt);
 
     if (!$achievement) {
-        // Record not found or doesn't belong to this student
+        $_SESSION['flash'] = ['type' => 'error', 'msg' => 'Achievement not found or access denied.'];
         header('Location: achievement-tracker.php');
         exit;
     }
@@ -77,6 +83,13 @@ $types = ['Award', 'Certificate', 'Recognition', 'Scholarship', 'Other'];
 <body>
 <div class="container">
     <h1><?= $id > 0 ? 'Edit Achievement' : 'Add Achievement' ?></h1>
+
+    <?php if (!empty($_SESSION['flash'])): ?>
+        <?php $f = $_SESSION['flash']; unset($_SESSION['flash']); ?>
+        <div class="form <?= $f['type'] === 'success' ? 'success' : 'error' ?>" style="max-width:100%;">
+            <?= htmlspecialchars($f['msg']) ?>
+        </div>
+    <?php endif; ?>
 
     <div class="panel">
         <form method="post" action="">
@@ -123,7 +136,6 @@ $types = ['Award', 'Certificate', 'Recognition', 'Scholarship', 'Other'];
             </div>
         </form>
     </div>
-
 </div>
 </body>
 </html>

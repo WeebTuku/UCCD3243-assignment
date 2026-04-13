@@ -2,61 +2,60 @@
 require 'database.php';
 include 'auth.php';
 
-$id           = isset($_GET['id']) ? (int)$_GET['id'] : 0;
-$student_name = $_SESSION['student_name'];
+$id         = isset($_GET['id']) ? (int)$_GET['id'] : 0;
+$student_id = $_SESSION['student_id'];
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $hours       = $_POST['hours'] ?? '';
-    $description = $_POST['description'] ?? '';
-    $date        = $_POST['date'] ?? '';
+    $hours       = (int)($_POST['hours'] ?? 0);
+    $description = trim($_POST['description'] ?? '');
+    $date        = trim($_POST['date'] ?? '');
     $post_id     = isset($_POST['id']) ? (int)$_POST['id'] : 0;
 
+    if ($hours <= 0 || empty($description) || empty($date)) {
+        $_SESSION['flash'] = ['type' => 'error', 'msg' => 'All fields are required and hours must be greater than 0.'];
+        header('Location: ' . $_SERVER['REQUEST_URI']);
+        exit;
+    }
+
     if ($post_id > 0) {
-        // UPDATE — only if the record belongs to the logged-in student
         $stmt = mysqli_prepare($con,
-            'UPDATE merits
-             SET hours = ?, description = ?, date = ?
-             WHERE id = ? AND student_name = ?'
+            'UPDATE merits SET hours = ?, description = ?, date = ? WHERE id = ? AND student_id = ?'
         );
-        mysqli_stmt_bind_param($stmt, 'issis',
-            $hours, $description, $date, $post_id, $student_name
-        );
-        mysqli_stmt_execute($stmt);
+        mysqli_stmt_bind_param($stmt, 'issii', $hours, $description, $date, $post_id, $student_id);
+        if (mysqli_stmt_execute($stmt)) {
+            $_SESSION['flash'] = ['type' => 'success', 'msg' => 'Merit record updated successfully.'];
+        } else {
+            $_SESSION['flash'] = ['type' => 'error', 'msg' => 'Failed to update merit record. Please try again.'];
+        }
         mysqli_stmt_close($stmt);
-
-        $_SESSION['flash'] = ['type' => 'success', 'msg' => 'Merit record updated successfully.'];
     } else {
-        // INSERT — tie the record to the logged-in student by name
         $stmt = mysqli_prepare($con,
-            'INSERT INTO merits (student_name, hours, description, date)
-             VALUES (?, ?, ?, ?)'
+            'INSERT INTO merits (student_id, hours, description, date) VALUES (?, ?, ?, ?)'
         );
-        mysqli_stmt_bind_param($stmt, 'siss',
-            $student_name, $hours, $description, $date
-        );
-        mysqli_stmt_execute($stmt);
+        mysqli_stmt_bind_param($stmt, 'iiss', $student_id, $hours, $description, $date);
+        if (mysqli_stmt_execute($stmt)) {
+            $_SESSION['flash'] = ['type' => 'success', 'msg' => 'Merit record added successfully.'];
+        } else {
+            $_SESSION['flash'] = ['type' => 'error', 'msg' => 'Failed to add merit record. Please try again.'];
+        }
         mysqli_stmt_close($stmt);
-
-        $_SESSION['flash'] = ['type' => 'success', 'msg' => 'Merit record added successfully.'];
     }
 
     header('Location: merit-tracker.php');
     exit;
 }
 
-// Load existing record for editing
 $merit = null;
 if ($id > 0) {
-    $stmt = mysqli_prepare($con,
-        'SELECT * FROM merits WHERE id = ? AND student_name = ?'
-    );
-    mysqli_stmt_bind_param($stmt, 'is', $id, $student_name);
+    $stmt = mysqli_prepare($con, 'SELECT * FROM merits WHERE id = ? AND student_id = ?');
+    mysqli_stmt_bind_param($stmt, 'ii', $id, $student_id);
     mysqli_stmt_execute($stmt);
     $res   = mysqli_stmt_get_result($stmt);
     $merit = mysqli_fetch_assoc($res);
     mysqli_stmt_close($stmt);
 
     if (!$merit) {
+        $_SESSION['flash'] = ['type' => 'error', 'msg' => 'Record not found or access denied.'];
         header('Location: merit-tracker.php');
         exit;
     }
@@ -74,6 +73,13 @@ if ($id > 0) {
 <div class="container">
     <h1><?= $id > 0 ? 'Edit Merit Record' : 'Add Merit Record' ?></h1>
 
+    <?php if (!empty($_SESSION['flash'])): ?>
+        <?php $f = $_SESSION['flash']; unset($_SESSION['flash']); ?>
+        <div class="form <?= $f['type'] === 'success' ? 'success' : 'error' ?>" style="max-width:100%;">
+            <?= htmlspecialchars($f['msg']) ?>
+        </div>
+    <?php endif; ?>
+
     <div class="panel">
         <form method="post" action="">
             <?php if ($id > 0): ?>
@@ -83,7 +89,7 @@ if ($id > 0) {
             <label>Contribution Hours
                 <input type="number" name="hours"
                        value="<?= htmlspecialchars($merit['hours'] ?? '') ?>"
-                       required>
+                       min="1" required>
             </label>
 
             <label>Activity Description
@@ -102,7 +108,6 @@ if ($id > 0) {
             </div>
         </form>
     </div>
-
 </div>
 </body>
 </html>

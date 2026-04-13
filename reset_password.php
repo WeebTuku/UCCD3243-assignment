@@ -1,31 +1,46 @@
-<?php 
-require('database.php'); 
+<?php
+require('database.php');
 
-$message = '';
+$message   = '';
 $show_form = true;
-$email = '';
+$email     = '';
 
 if (isset($_GET['token'])) {
-    $token = mysqli_real_escape_string($con, $_GET['token']);
+    $token = trim($_GET['token']);
 
-    $query = mysqli_query($con, "SELECT * FROM password_resets WHERE token='$token' LIMIT 1");
-    if (mysqli_num_rows($query) == 1) {
-        $row = mysqli_fetch_assoc($query);
+    $stmt = mysqli_prepare($con, "SELECT * FROM password_resets WHERE token = ? LIMIT 1");
+    mysqli_stmt_bind_param($stmt, 's', $token);
+    mysqli_stmt_execute($stmt);
+    $res = mysqli_stmt_get_result($stmt);
+    $row = mysqli_fetch_assoc($res);
+    mysqli_stmt_close($stmt);
+
+    if ($row) {
         $email = $row['email'];
+
         if ($_SERVER["REQUEST_METHOD"] == "POST" && !empty($_POST['password'])) {
-            $password = mysqli_real_escape_string($con, $_POST['password']);
+            $password        = $_POST['password'];
             $hashed_password = md5($password);
-            mysqli_query($con, "UPDATE students SET _password='$hashed_password' WHERE email='$email'");
-            mysqli_query($con, "DELETE FROM password_resets WHERE email='$email'");
+
+            $upd = mysqli_prepare($con, "UPDATE students SET _password = ? WHERE email = ?");
+            mysqli_stmt_bind_param($upd, 'ss', $hashed_password, $email);
+            mysqli_stmt_execute($upd);
+            mysqli_stmt_close($upd);
+
+            $del = mysqli_prepare($con, "DELETE FROM password_resets WHERE email = ?");
+            mysqli_stmt_bind_param($del, 's', $email);
+            mysqli_stmt_execute($del);
+            mysqli_stmt_close($del);
+
             header("Location: login.php?reset_success=1");
             exit();
         }
     } else {
-        $message = 'Invalid or expired token.';
+        $message   = 'Invalid or expired token.';
         $show_form = false;
     }
 } else {
-    $message = 'No reset token provided.';
+    $message   = 'No reset token provided.';
     $show_form = false;
 }
 ?>
@@ -39,19 +54,20 @@ if (isset($_GET['token'])) {
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-
 <div class="container">
     <div class="form">
-        <h1>Password reset</h1>
-        <?php if (!empty($message)) { echo '<div class="flash">' . htmlspecialchars($message) . '</div>'; } ?>
-        <?php if ($show_form) { ?>
-        <form action="" method="post" name="password_reset">
+        <h1>Password Reset</h1>
+        <?php if (!empty($message)): ?>
+            <div class="error"><?= htmlspecialchars($message) ?></div>
+        <?php endif; ?>
+        <?php if ($show_form): ?>
+        <form action="" method="post">
             <input type="password" name="password" placeholder="Enter new password" required /><br>
             <input name="submit" type="submit" value="Reset Password" />
         </form>
-        <?php } ?>
+        <?php endif; ?>
+        <p><a href="login.php">Back to Login</a></p>
     </div>
 </div>
-
 </body>
 </html>

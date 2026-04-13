@@ -11,38 +11,44 @@
 <body>
     <div class="container">
         <?php
-        // Need DB file (required: if file does not exist, raise fatal error)
         require('database.php');
 
-        // Form submission checking (Logic Tier- Check if registration form can be submitted - to Data Tier)
-        if (isset($_REQUEST['student_name'])) {
+        if (isset($_POST['student_name'])) {
+            $student_name = trim($_POST['student_name']);
+            $email        = trim($_POST['email']);
+            $password     = $_POST['password'];
+            $dob          = $_POST['dob'];
 
-            // Declare variable, assign value from form
-            // Process/format the input
-            // Filter the user input
-            $student_name = stripslashes($_REQUEST['student_name']);
-            $student_name = mysqli_real_escape_string($con, $student_name);
-            $email = stripslashes($_REQUEST['email']);
-            $email = mysqli_real_escape_string($con, $email);
-            $password = stripslashes($_REQUEST['password']);
-            $password = mysqli_real_escape_string($con, $password);
-            $reg_date = date("Y-m-d H:i:s");
-            $dob = stripslashes($_REQUEST['dob']);
-            $dob = mysqli_real_escape_string($con, $dob);
-            // SQL  query - Prepare statement of INSERT data
-            $query = "INSERT into students (name, email, dob, _password) 
-    VALUES ('$student_name', '$email', '$dob', '" . md5($password) . "')";
-            // Execute query
-            $result = mysqli_query($con, $query);
-            // If executed successfully
-            if ($result) {
-                echo "<div class='form'> 
-        <h3>You are registered successfully.</h3> 
-        <br/>Click here to <a href='login.php'>Login</a></div>";
+            // Check if email already exists
+            $check = mysqli_prepare($con, "SELECT id FROM students WHERE email = ?");
+            mysqli_stmt_bind_param($check, 's', $email);
+            mysqli_stmt_execute($check);
+            mysqli_stmt_store_result($check);
+
+            if (mysqli_stmt_num_rows($check) > 0) {
+                echo "<div class='form error'><h3>Email is already registered.</h3>
+                      <br/>Click here to <a href='login.php'>Login</a></div>";
+            } else {
+                mysqli_stmt_close($check);
+                $hashed = md5($password);
+                $stmt = mysqli_prepare($con,
+                    "INSERT INTO students (name, email, dob, _password) VALUES (?, ?, ?, ?)"
+                );
+                mysqli_stmt_bind_param($stmt, 'ssss', $student_name, $email, $dob, $hashed);
+                $result = mysqli_stmt_execute($stmt);
+                mysqli_stmt_close($stmt);
+
+                if ($result) {
+                    echo "<div class='form success'>
+                            <h3>You are registered successfully.</h3>
+                            <br/>Click here to <a href='login.php'>Login</a>
+                          </div>";
+                } else {
+                    echo "<div class='form error'><h3>Registration failed. Please try again.</h3></div>";
+                }
             }
-        } else { // else shows the form
+        } else {
             ?>
-
             <div class="panel">
                 <div class="form">
                     <h1>User Registration</h1>
@@ -54,12 +60,12 @@
                         <label for="password">Password</label>
                         <input type="password" name="password" placeholder="Password" required /><br>
                         <label for="dob">Date of Birth</label>
-                        <input type="date" name="dob" placeholder="Date of Birth" required /><br>
+                        <input type="date" name="dob" required /><br>
                         <input type="submit" name="submit" value="Register" />
                     </form>
+                    <p>Already registered? <a href='login.php'>Login Here</a></p>
                 </div>
             </div>
-
         <?php } ?>
     </div>
 </body>

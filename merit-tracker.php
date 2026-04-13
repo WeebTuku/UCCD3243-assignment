@@ -2,14 +2,14 @@
 require 'database.php';
 include 'auth.php';
 
-$action       = $_GET['action'] ?? '';
-$student_name = $_SESSION['student_name'];
+$action     = $_GET['action'] ?? '';
+$student_id = $_SESSION['student_id'];
 
 // Delete merit record — only if it belongs to the logged-in student
 if ($action === 'delete' && isset($_GET['id'])) {
     $id   = (int)$_GET['id'];
-    $stmt = mysqli_prepare($con, 'DELETE FROM merits WHERE id = ? AND student_name = ?');
-    mysqli_stmt_bind_param($stmt, 'is', $id, $student_name);
+    $stmt = mysqli_prepare($con, 'DELETE FROM merits WHERE id = ? AND student_id = ?');
+    mysqli_stmt_bind_param($stmt, 'ii', $id, $student_id);
     mysqli_stmt_execute($stmt);
     mysqli_stmt_close($stmt);
 
@@ -26,27 +26,29 @@ $order = strtolower($_GET['order'] ?? 'desc') === 'asc' ? 'ASC' : 'DESC';
 $allowed_sorts = ['hours', 'description', 'date'];
 if (!in_array($sort, $allowed_sorts)) $sort = 'date';
 
-// Build query — only show records belonging to the logged-in student
-$esc_name = mysqli_real_escape_string($con, $student_name);
-$conds    = ["student_name = '{$esc_name}'"];
+// Build query using prepared statement
+$where  = 'WHERE student_id = ?';
+$params = [$student_id];
+$types  = 'i';
 
 if ($q !== '') {
-    $esc_q   = mysqli_real_escape_string($con, $q);
-    $like    = '%' . $esc_q . '%';
-    $conds[] = "(description LIKE '{$like}' OR hours LIKE '{$like}' OR date LIKE '{$like}')";
+    $like    = '%' . $q . '%';
+    $where  .= ' AND (description LIKE ? OR hours LIKE ? OR date LIKE ?)';
+    $types  .= 'sss';
+    $params  = array_merge($params, [$like, $like, $like]);
 }
 
-$sql = 'SELECT * FROM merits';
-if (count($conds) > 0) $sql .= ' WHERE ' . implode(' AND ', $conds);
-$sql .= " ORDER BY {$sort} {$order}";
+$sql  = "SELECT * FROM merits $where ORDER BY {$sort} {$order}";
+$stmt = mysqli_prepare($con, $sql);
+mysqli_stmt_bind_param($stmt, $types, ...$params);
+mysqli_stmt_execute($stmt);
+$res  = mysqli_stmt_get_result($stmt);
 
 $merits = [];
-$res = mysqli_query($con, $sql);
-if ($res) {
-    while ($row = mysqli_fetch_assoc($res)) {
-        $merits[] = $row;
-    }
+while ($row = mysqli_fetch_assoc($res)) {
+    $merits[] = $row;
 }
+mysqli_stmt_close($stmt);
 ?>
 <!doctype html>
 <html lang="en">
@@ -80,14 +82,14 @@ if ($res) {
                    value="<?= htmlspecialchars($_GET['q'] ?? '') ?>">
 
             <select name="sort">
-                <option value="date" <?= (($_GET['sort'] ?? 'date') === 'date') ? 'selected' : '' ?>>Date</option>
-                <option value="hours" <?= (($_GET['sort'] ?? '') === 'hours') ? 'selected' : '' ?>>Hours</option>
-                <option value="description" <?= (($_GET['sort'] ?? '') === 'description') ? 'selected' : '' ?>>Description</option>
+                <option value="date"        <?= (($_GET['sort'] ?? 'date') === 'date')        ? 'selected' : '' ?>>Date</option>
+                <option value="hours"       <?= (($_GET['sort'] ?? '')     === 'hours')       ? 'selected' : '' ?>>Hours</option>
+                <option value="description" <?= (($_GET['sort'] ?? '')     === 'description') ? 'selected' : '' ?>>Description</option>
             </select>
 
             <select name="order">
                 <option value="desc" <?= (($_GET['order'] ?? 'desc') === 'desc') ? 'selected' : '' ?>>Newest first</option>
-                <option value="asc"  <?= (($_GET['order'] ?? '') === 'asc') ? 'selected' : '' ?>>Oldest first</option>
+                <option value="asc"  <?= (($_GET['order'] ?? '')      === 'asc')  ? 'selected' : '' ?>>Oldest first</option>
             </select>
 
             <button class="btn" type="submit">Apply</button>
